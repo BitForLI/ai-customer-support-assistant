@@ -16,6 +16,16 @@ The project focuses on observable behaviour rather than a chat interface alone: 
 
 The bundled sample data and current intent rules are primarily Chinese, so the example prompts below use the language exercised by the tests. This README is in English; some user-facing strings and code comments remain Chinese.
 
+## Try three real paths
+
+| Ask the local demo | What happens |
+| --- | --- |
+| `七天内可以退货吗？` | Retrieves the return policy and includes a document reference. |
+| `查询订单 9003` | Looks up a sample order and reports its status. |
+| `取消订单 9001` | Requests confirmation, then creates a human-review ticket; it does not cancel the order. |
+
+These prompts come from the [offline evaluation set](evals/dataset.json) and [agent tests](tests/test_agent.py). The catalogue, orders, and policies are sample data, not a connection to a real store.
+
 ## Features
 
 - Product recommendations, stock checks, pricing, and order tracking.

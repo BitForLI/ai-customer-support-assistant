@@ -1,50 +1,36 @@
 # AI Customer Support Assistant
 
-A customer-service assistant that answers routine questions from business data and hands sensitive requests to a person instead of acting beyond its authority.
+I built this project around one question: if an assistant can read products, orders, and company policies, how do I stop it from pretending it has authority it does not have?
 
-## Product at a glance
+The result is a local customer-support demo. It can answer routine questions, remember useful details across messages, and show where a policy answer came from. When a customer asks for a sensitive action such as cancelling an order, it asks for confirmation and creates a ticket for a person instead of changing the order itself.
 
-| | |
+## Three paths to try
+
+| Question | Result |
 | --- | --- |
-| **Users** | Customers asking about products, orders, returns, warranties, and invoices |
-| **Problem** | A useful assistant must retrieve the right information, remember context, and know when not to act |
-| **Core experience** | Ask a question, receive an answer with sources, or create a support ticket after confirmation |
-| **Safety boundary** | The agent can look up information and request human review; it cannot directly cancel an order |
-| **Runs locally** | The default provider needs no API key and uses fixture-backed business data |
+| `七天内可以退货吗？` | Retrieves the return policy and includes the document title and ID. |
+| `查询订单 9003` | Uses the sample order tool and reports the order status. |
+| `取消订单 9001` | Requests confirmation and then creates a human-review ticket. The order is not cancelled. |
 
-The project focuses on observable behaviour rather than a chat interface alone: tool selection, retrieval quality, multi-turn state, confirmation before sensitive actions, and predictable failure handling.
+The included catalogue, orders, and policies are fictional. The intent rules and evaluation examples are mainly Chinese, so translated English prompts do not exercise exactly the same path.
 
-The bundled sample data and current intent rules are primarily Chinese, so the example prompts below use the language exercised by the tests. This README is in English; some user-facing strings and code comments remain Chinese.
+## Where I drew the boundary
 
-## Try three real paths
+The assistant may search products, check stock, look up sample orders, retrieve policies, and open an escalation ticket. It may not directly cancel an order, issue a refund, or modify customer data.
 
-| Ask the local demo | What happens |
-| --- | --- |
-| `七天内可以退货吗？` | Retrieves the return policy and includes a document reference. |
-| `查询订单 9003` | Looks up a sample order and reports its status. |
-| `取消订单 9001` | Requests confirmation, then creates a human-review ticket; it does not cancel the order. |
+That boundary is enforced in the workflow rather than left to the wording of a prompt. Sensitive requests pause for explicit confirmation before ticket creation. Tool failures are retried once, and optional OpenAI wording can fall back to a local draft. Selected prompt-injection phrases are rejected, but this is a narrow rule-based check—not a claim that the project is protected from every possible attack.
 
-These prompts come from the [offline evaluation set](evals/dataset.json) and [agent tests](tests/test_agent.py). The catalogue, orders, and policies are sample data, not a connection to a real store.
-
-## Features
-
-- Product recommendations, stock checks, pricing, and order tracking.
-- Hybrid retrieval over return, refund, warranty, and invoice policies, with source references.
-- Multi-turn conversation state and customer-detail extraction.
-- Explicit confirmation before creating a human-review ticket for order cancellation and other sensitive requests; the agent does not change orders itself.
-- Keyword-based checks for selected prompt-injection phrases, one retry for failed tools, and a local draft fallback when optional OpenAI wording fails.
-- SQLite-backed escalation tickets for complaints and requests that need a person.
-- FastAPI, a small browser client, a command-line mode, and an MCP tool server.
-
-## Request flow
+## How a message moves through the project
 
 ```text
-message
+customer message
   -> intent and entity extraction
-  -> product / order / policy / support tools
+  -> product, order, policy, or support tool
   -> confirmation and failure handling
-  -> response with tool history and sources
+  -> answer with tool history and any sources
 ```
+
+[`src/agent_graph.py`](src/agent_graph.py) defines that LangGraph workflow. [`src/business_tools.py`](src/business_tools.py) reads the sample business data, [`src/rag_engine.py`](src/rag_engine.py) combines BM25 with character-bigram similarity for policy retrieval, and [`src/tickets.py`](src/tickets.py) stores escalation tickets in SQLite. The MCP server reuses the same underlying operations rather than implementing a second set of business rules.
 
 ## Run locally
 
@@ -56,28 +42,18 @@ python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
 
-# Web mode
 python main.py --web
 # Open http://127.0.0.1:8000
+```
 
-# Command-line mode
+The default `LLM_PROVIDER=local` mode needs no API key. To use an OpenAI model for response wording, copy `.env.example` to `.env`, set `LLM_PROVIDER=openai` and provide `OPENAI_API_KEY`.
+
+Command-line and MCP modes are also available:
+
+```bash
 python main.py
-```
-
-The default `LLM_PROVIDER=local` mode does not require an API key. To use an OpenAI model for response wording, copy the example environment file and set `LLM_PROVIDER=openai` and `OPENAI_API_KEY`.
-
-```bash
-cp .env.example .env
-python main.py --web
-```
-
-## MCP server
-
-```bash
 python -m src.mcp_server
 ```
-
-The server exposes `search_products`, `lookup_orders`, and `escalate_to_human`.
 
 ## Tests and evaluation
 
@@ -86,36 +62,6 @@ python -m pytest -q
 python -m evals.run_eval
 ```
 
-The test suite covers retrieval, product and order tools, multi-turn state, confirmation, escalation, and the HTTP API. The six-case offline evaluation reports exact intent matches, required answer-text matches, expected tool use, and citation presence. Citation presence is not a check that the cited source supports every statement.
+Tests cover product and order routing, policy references, multi-turn customer details, confirmation, ticket creation, tool failure, and the HTTP API. The six-case offline evaluation checks expected intent, required answer text, tool use, and whether a source-required answer contains a citation.
 
-## Evidence behind project claims
-
-The [LangGraph workflow](src/agent_graph.py) contains intent routing,
-confirmation and tool-failure handling. [Business tools](src/business_tools.py)
-read sample catalogue/order data and create [SQLite tickets](src/tickets.py).
-The [retriever](src/rag_engine.py) combines BM25 and character-bigram cosine
-similarity; policy answers attach document titles and IDs. The [MCP server](src/mcp_server.py)
-reuses those business functions. [Agent tests](tests/test_agent.py) exercise the
-main paths, while the [offline evaluator](evals/run_eval.py) specifies its
-scoring rules. Describe these as local, fixture-backed behaviours rather than
-production support outcomes or general prompt-injection protection.
-
-## Example prompts
-
-Use the Chinese customer questions in [`evals/dataset.json`](evals/dataset.json)
-or [`tests/test_agent.py`](tests/test_agent.py). They exercise the implemented
-intent rules; translated English prompts are not equivalent test fixtures.
-
-## Repository layout
-
-```text
-data/                  Sample catalogue, order, and policy data
-src/agent_graph.py     LangGraph workflow
-src/rag_engine.py      BM25 and character-similarity retrieval
-src/langchain_tools.py LangChain tool adapters
-src/mcp_server.py      MCP server
-src/api.py             FastAPI interface
-web/index.html         Browser demo
-tests/                 Automated tests
-evals/                 Application-level evaluation set
-```
+The evaluation checks citation presence, not whether every generated sentence is fully supported by the cited document. It is a small regression suite for this demo, not a general measure of production assistant quality.
